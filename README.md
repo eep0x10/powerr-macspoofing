@@ -1,12 +1,24 @@
-![PowerR MAC Spoofing — Inspeção e configuração de interfaces Windows.](docs/assets/banner.svg)
+<div align="center">
+
+<img src="docs/assets/banner.png" alt="PowerR MAC Spoofing — ilustração de marca" width="100%">
 
 # PowerR MAC Spoofing
 
-**Inspeção e configuração de interfaces Windows.**
+### Interfaces de rede, sob controle.
+
+Utilitário gráfico PowerShell para inspecionar interfaces e alterar ou restaurar endereços MAC em um ambiente Windows controlado. O código também contém integração de captura com TShark.
+
+[![Script: PowerShell](https://img.shields.io/badge/Script-PowerShell-34495e?style=flat-square)](Change-MAC-Address.ps1) [![Interface: Windows Forms](https://img.shields.io/badge/Interface-Windows%20Forms-34495e?style=flat-square)](Change-MAC-Address.ps1)
 
 [Escopo e requisitos](#escopo-e-requisitos) · [Começar pela revisão](#começar-pela-revisão) · [Organização](#organização) · [Limites e validação](#limites-e-validação)
 
-Utilitário gráfico PowerShell para inspecionar interfaces e alterar ou restaurar endereços MAC em um ambiente Windows controlado. O código também contém integração de captura com TShark.
+</div>
+
+> O banner é uma ilustração conceitual de marca criada com IA; não é uma captura da aplicação nem comprovação de um resultado real.
+
+| Inspecione | Configure | Restaure |
+| :--- | :--- | :--- |
+| Identifique o adaptador em laboratório. | Revise a configuração e seus efeitos de conectividade. | Confira o retorno ao endereço e estado originais. |
 
 ## Escopo e requisitos
 
