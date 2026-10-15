@@ -6,6 +6,7 @@ param(
     [string]$Mac,
     [ValidateRange(5,120)][int]$Seconds = 20,
     [switch]$AcknowledgeDisconnect,
+    [switch]$ConfirmedByGui,
     [switch]$Json,
     [string]$TSharkPath
 )
@@ -72,7 +73,7 @@ function Write-Result($Value) {
 
 switch ($Action) {
     'Adapters' {
-        $items = @(Get-NetAdapter | Select-Object Name, InterfaceGuid, Status, MacAddress, LinkSpeed, InterfaceDescription)
+        $items = @(Get-NetAdapter | Select-Object Name, InterfaceGuid, Status, MacAddress, LinkSpeed, InterfaceDescription, HardwareInterface, PhysicalMediaType)
         if ($Json) { Write-Result ([pscustomobject]@{ Items = $items }) } else { $items | Format-Table -AutoSize }
     }
     'Capture' {
@@ -113,7 +114,7 @@ switch ($Action) {
         $guid = $target.InterfaceGuid.ToString().Trim('{}')
         $backup = Get-BackupPath $target
         if (Test-Path -LiteralPath $backup) { throw "Já existe uma sessão para este adaptador: $backup. Restaure antes de iniciar outra." }
-        if ($PSCmdlet.ShouldProcess("$($target.Name) [$guid]", "Aplicar MAC $desired e reiniciar adaptador")) {
+        if (($ConfirmedByGui -and -not $WhatIfPreference) -or $PSCmdlet.ShouldProcess("$($target.Name) [$guid]", "Aplicar MAC $desired e reiniciar adaptador")) {
             New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
             $state = [pscustomobject]@{ Schema = 1; Guid = $guid; Name = $target.Name; OriginalMac = Normalize-Mac $target.MacAddress; OriginalOverride = Get-Override $target; AppliedMac = $desired; CreatedAt = (Get-Date).ToUniversalTime().ToString('o') }
             $temp = "$backup.tmp"
@@ -137,7 +138,7 @@ switch ($Action) {
         if (-not (Test-Path -LiteralPath $backup)) { throw 'Não há backup desta sessão. Nenhuma alteração foi feita.' }
         $state = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
         if ($state.Schema -ne 1 -or $state.Guid -ne $target.InterfaceGuid.ToString().Trim('{}')) { throw 'Backup incompatível com o adaptador. Nenhuma alteração foi feita.' }
-        if ($PSCmdlet.ShouldProcess($target.Name, "Restaurar configuração anterior e reiniciar adaptador")) {
+        if (($ConfirmedByGui -and -not $WhatIfPreference) -or $PSCmdlet.ShouldProcess($target.Name, "Restaurar configuração anterior e reiniciar adaptador")) {
             if ([string]::IsNullOrEmpty($state.OriginalOverride)) {
                 Remove-NetAdapterAdvancedProperty -Name $target.Name -RegistryKeyword 'NetworkAddress' -NoRestart -Confirm:$false -ErrorAction SilentlyContinue
             } else {

@@ -12,13 +12,21 @@
 
 </div>
 
-PowerR ajuda a identificar endereços de origem vistos em uma porta monitorada, revisar um plano de alteração do adaptador Ethernet, aplicar um MAC explícito e restaurar a configuração anterior. O operador escolhe o adaptador e o endereço; a captura nunca dispara alteração automática.
+PowerR é um aplicativo gráfico nativo de Windows. Ajuda a identificar endereços de origem vistos em uma porta monitorada, revisar um plano de alteração do adaptador Ethernet, aplicar um MAC explícito e restaurar a configuração anterior. O operador escolhe o adaptador e o endereço; a captura nunca dispara alteração automática.
 
 > O banner é arte conceitual, não uma captura da ferramenta. Use apenas em testes internos autorizados e com acesso local de recuperação.
 
 ## Início rápido
 
-Requisitos: Windows PowerShell 5.1 ou PowerShell 7, módulo NetAdapter do Windows. Administrador somente para aplicar ou restaurar. Para captura: Wireshark com TShark e Npcap instalados.
+Requisitos para usar o `.exe`: Windows 10/11 x64, Windows PowerShell 5.1 e módulo NetAdapter. O executável inclui o runtime .NET, abre uma janela e solicita elevação de administrador. Para captura: Wireshark com TShark e Npcap instalados. O uso de `Adapters`, `Plan` e `Diagnose` no script de linha de comando não exige elevação.
+
+Baixe `PowerR.exe` na [página de releases](https://github.com/eep0x10/powerr-macspoofing/releases), verifique o SHA-256 publicado e execute-o. A janela permite escolher adaptador, capturar, selecionar um MAC observado, revisar o plano, aplicar, acompanhar o estado, diagnosticar e restaurar. O script PowerShell está embutido no executável e é extraído para `Program Files\PowerR\app` quando necessário; o backup de recuperação fica em `%LOCALAPPDATA%\PowerR`.
+
+Para compilar a partir do código, instale o SDK .NET 10 e rode `./scripts/build.ps1`. O resultado fica em `dist/win-x64/PowerR.exe`. Veja [testes e distribuição](docs/TESTING.md).
+
+### Linha de comando
+
+O script abaixo é uma alternativa de automação. Sem parâmetros, `PowerR.ps1` lista adaptadores e encerra; para interagir pela interface, abra **PowerR.exe**.
 
 ```powershell
 git clone https://github.com/eep0x10/powerr-macspoofing.git

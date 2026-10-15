@@ -3,3 +3,6 @@
 *.log
 *.tmp
 state/
+desktop/bin/
+desktop/obj/
+dist/
