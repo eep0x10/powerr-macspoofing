@@ -6,6 +6,7 @@ param(
     [string]$Mac,
     [ValidateRange(5,120)][int]$Seconds = 20,
     [switch]$AcknowledgeDisconnect,
+    [switch]$Json,
     [string]$TSharkPath
 )
 
@@ -65,16 +66,21 @@ function Get-TShark {
     throw 'TShark não encontrado. Instale Wireshark/Npcap ou informe -TSharkPath.'
 }
 
+function Write-Result($Value) {
+    if ($Json) { $Value | ConvertTo-Json -Depth 6 -Compress } else { $Value }
+}
+
 switch ($Action) {
     'Adapters' {
-        Get-NetAdapter | Select-Object Name, InterfaceGuid, Status, MacAddress, LinkSpeed, InterfaceDescription | Format-Table -AutoSize
+        $items = @(Get-NetAdapter | Select-Object Name, InterfaceGuid, Status, MacAddress, LinkSpeed, InterfaceDescription)
+        if ($Json) { Write-Result ([pscustomobject]@{ Items = $items }) } else { $items | Format-Table -AutoSize }
     }
     'Capture' {
         $target = Get-Target $Adapter
         $tshark = Get-TShark
         $guid = $target.InterfaceGuid.ToString().Trim('{}')
         $device = '\Device\NPF_{' + $guid + '}'
-        Write-Host "Capturando $Seconds segundos em $($target.Name) ($device). Nenhum pacote bruto é salvo."
+        if (-not $Json) { Write-Host "Capturando $Seconds segundos em $($target.Name) ($device). Nenhum pacote bruto é salvo." }
         $rows = @(& $tshark -i $device -a "duration:$Seconds" -f 'arp or ether broadcast or ether multicast or udp port 67 or udp port 68' -Y 'arp or lldp or dhcp or bootp' -T fields -e frame.time_epoch -e eth.src -e _ws.col.Protocol 2>&1)
         if ($LASTEXITCODE -ne 0) { throw "TShark falhou: $($rows -join ' ')" }
         $own = ($target.MacAddress -replace '[-:]', '').ToUpperInvariant()
@@ -85,15 +91,19 @@ switch ($Action) {
             if ($candidate -eq $own) { continue }
             [pscustomobject]@{ Mac = $candidate; Protocol = if ($parts.Count -ge 3) { $parts[2] } else { '' }; Time = $parts[0] }
         }
-        $events | Group-Object Mac | Sort-Object Count -Descending | ForEach-Object {
+        $results = @($events | Group-Object Mac | Sort-Object Count -Descending | ForEach-Object {
             [pscustomobject]@{ Mac = $_.Name; Packets = $_.Count; Protocols = ($_.Group.Protocol | Sort-Object -Unique) -join ', '; FirstSeen = $_.Group[0].Time }
-        } | Format-Table -AutoSize
-        Write-Host 'A origem observada não comprova que o dispositivo está na porta do switch. Confirme a topologia antes de aplicar.'
+        })
+        if ($Json) { Write-Result ([pscustomobject]@{ Items = $results; Adapter = $target.Name; Seconds = $Seconds }) } else {
+            $results | Format-Table -AutoSize
+            Write-Host 'A origem observada não comprova que o dispositivo está na porta do switch. Confirme a topologia antes de aplicar.'
+        }
     }
     'Plan' {
         $target = Get-Target $Adapter
         $desired = Normalize-Mac $Mac
-        [pscustomobject]@{ Adapter = $target.Name; Guid = $target.InterfaceGuid; CurrentMac = $target.MacAddress; DesiredMac = $desired; CurrentOverride = Get-Override $target; Backup = Get-BackupPath $target; DisconnectExpected = $true } | Format-List
+        $result = [pscustomobject]@{ Adapter = $target.Name; Guid = $target.InterfaceGuid; CurrentMac = $target.MacAddress; DesiredMac = $desired; CurrentOverride = Get-Override $target; Backup = Get-BackupPath $target; DisconnectExpected = $true }
+        if ($Json) { Write-Result $result } else { $result | Format-List }
     }
     'Apply' {
         Test-Administrator
@@ -113,7 +123,7 @@ switch ($Action) {
                 Set-NetAdapter -Name $target.Name -MacAddress $desired -NoRestart -Confirm:$false
                 Restart-NetAdapter -Name $target.Name -Confirm:$false
                 $verified = Wait-Mac $guid $desired
-                Write-Host "MAC verificado: $($verified.MacAddress). Backup: $backup"
+                if ($Json) { Write-Result ([pscustomobject]@{ Success = $true; Adapter = $verified.Name; Mac = $verified.MacAddress; Backup = $backup }) } else { Write-Host "MAC verificado: $($verified.MacAddress). Backup: $backup" }
             } catch {
                 Write-Error "Alteração não verificada. Estado preservado em $backup. Execute Status e Restore localmente. $($_.Exception.Message)"
             }
@@ -136,19 +146,20 @@ switch ($Action) {
             Restart-NetAdapter -Name $target.Name -Confirm:$false
             $verified = Wait-Mac $state.Guid $state.OriginalMac
             Remove-Item -LiteralPath $backup
-            Write-Host "MAC restaurado e verificado: $($verified.MacAddress)"
+            if ($Json) { Write-Result ([pscustomobject]@{ Success = $true; Adapter = $verified.Name; Mac = $verified.MacAddress }) } else { Write-Host "MAC restaurado e verificado: $($verified.MacAddress)" }
         }
     }
     'Status' {
         $target = Get-Target $Adapter
         $backup = Get-BackupPath $target
-        [pscustomobject]@{ Adapter = $target.Name; Guid = $target.InterfaceGuid; Status = $target.Status; CurrentMac = $target.MacAddress; Override = Get-Override $target; Backup = if (Test-Path -LiteralPath $backup) { $backup } else { $null } } | Format-List
+        $result = [pscustomobject]@{ Adapter = $target.Name; Guid = $target.InterfaceGuid; Status = $target.Status; CurrentMac = $target.MacAddress; Override = Get-Override $target; Backup = if (Test-Path -LiteralPath $backup) { $backup } else { $null } }
+        if ($Json) { Write-Result $result } else { $result | Format-List }
     }
     'Diagnose' {
         $target = Get-Target $Adapter
         $config = Get-NetIPConfiguration -InterfaceIndex $target.ifIndex -ErrorAction SilentlyContinue
         $stats = Get-NetAdapterStatistics -Name $target.Name -ErrorAction SilentlyContinue
-        [pscustomobject]@{
+        $result = [pscustomobject]@{
             Adapter = $target.Name
             Guid = $target.InterfaceGuid
             Link = $target.Status
@@ -158,7 +169,10 @@ switch ($Action) {
             DnsServers = @($config.DNSServer.ServerAddresses) -join ', '
             ReceivedPackets = $stats.ReceivedUnicastPackets
             SentPackets = $stats.SentUnicastPackets
-        } | Format-List
-        Write-Host 'Diagnóstico local: link/IP/pacotes não comprovam autorização no switch ou conectividade fim a fim.'
+        }
+        if ($Json) { Write-Result $result } else {
+            $result | Format-List
+            Write-Host 'Diagnóstico local: link/IP/pacotes não comprovam autorização no switch ou conectividade fim a fim.'
+        }
     }
 }
