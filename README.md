@@ -1,47 +1,73 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="PowerR MAC Spoofing — ilustração de marca" width="100%">
+<img src="docs/assets/banner.png" alt="PowerR — ilustração de identidade da ferramenta" width="100%">
 
-# PowerR MAC Spoofing
+# PowerR
 
-### Interfaces de rede, sob controle.
+### Captura observável, troca controlada e restauração do MAC no Windows.
 
-Utilitário gráfico PowerShell para inspecionar interfaces e alterar ou restaurar endereços MAC em um ambiente Windows controlado. O código também contém integração de captura com TShark.
+[![PowerShell 5.1+](https://img.shields.io/badge/PowerShell-5.1%2B-3465A4)](PowerR.ps1) [![Windows](https://img.shields.io/badge/plataforma-Windows-0078D4)](docs/OPERATIONS.md) [![Teste local](https://img.shields.io/badge/teste-local-7B61A8)](tests/Smoke.ps1)
 
-[![Script: PowerShell](https://img.shields.io/badge/Script-PowerShell-34495e?style=flat-square)](Change-MAC-Address.ps1) [![Interface: Windows Forms](https://img.shields.io/badge/Interface-Windows%20Forms-34495e?style=flat-square)](Change-MAC-Address.ps1)
-
-[Escopo e requisitos](#escopo-e-requisitos) · [Começar pela revisão](#começar-pela-revisão) · [Organização](#organização) · [Limites e validação](#limites-e-validação)
+[Início rápido](#início-rápido) · [Fluxo](#fluxo-de-trabalho) · [Documentação](#documentação) · [Limites](#limites)
 
 </div>
 
-> O banner é uma ilustração conceitual de marca criada com IA; não é uma captura da aplicação nem comprovação de um resultado real.
+PowerR é um aplicativo gráfico nativo de Windows. Ajuda a identificar endereços de origem vistos em uma porta monitorada, revisar um plano de alteração do adaptador Ethernet, aplicar um MAC explícito e restaurar a configuração anterior. O operador escolhe o adaptador e o endereço; a captura nunca dispara alteração automática.
 
-| Inspecione | Configure | Restaure |
-| :--- | :--- | :--- |
-| Identifique o adaptador em laboratório. | Revise a configuração e seus efeitos de conectividade. | Confira o retorno ao endereço e estado originais. |
+> O banner é arte conceitual, não uma captura da ferramenta. Use apenas em testes internos autorizados e com acesso local de recuperação.
 
-## Escopo e requisitos
+## Início rápido
 
-Requer Windows, Windows PowerShell, Windows Forms e privilégios administrativos. A integração de captura usa o caminho do Wireshark/TShark definido no código; a enumeração de interfaces também depende desse executável.
+Requisitos para usar o `.exe`: Windows 10/11 x64, Windows PowerShell 5.1 e módulo NetAdapter. O executável inclui o runtime .NET, abre uma janela e solicita elevação de administrador. Para captura: Wireshark com TShark e Npcap instalados. O uso de `Adapters`, `Plan` e `Diagnose` no script de linha de comando não exige elevação.
 
-## Começar pela revisão
+Baixe `PowerR.exe` na [página de releases](https://github.com/eep0x10/powerr-macspoofing/releases), verifique o SHA-256 publicado e execute-o. A janela permite escolher adaptador, capturar, selecionar um MAC observado, revisar o plano, aplicar, acompanhar o estado, diagnosticar e restaurar. O script PowerShell está embutido no executável e é extraído para `Program Files\PowerR\app` quando necessário; o backup de recuperação fica em `%LOCALAPPDATA%\PowerR`.
+
+Para compilar a partir do código, instale o SDK .NET 10 e rode `./scripts/build.ps1`. O resultado fica em `dist/win-x64/PowerR.exe`. Veja [testes e distribuição](docs/TESTING.md).
+
+### Linha de comando
+
+O script abaixo é uma alternativa de automação. Sem parâmetros, `PowerR.ps1` lista adaptadores e encerra; para interagir pela interface, abra **PowerR.exe**.
 
 ```powershell
 git clone https://github.com/eep0x10/powerr-macspoofing.git
 cd powerr-macspoofing
-Get-Content .\Change-MAC-Address.ps1
+./PowerR.ps1 -Action Adapters
+./PowerR.ps1 -Action Capture -Adapter 'Ethernet' -Seconds 20
+./PowerR.ps1 -Action Plan -Adapter 'Ethernet' -Mac '02:11:22:33:44:55'
 ```
 
-Revise [Change-MAC-Address.ps1](Change-MAC-Address.ps1), prepare uma máquina de laboratório e registre a configuração original antes de executar. O script solicita elevação e pode interromper a conectividade ao alterar a interface. Não execute em uma sessão remota da qual dependa para recuperação.
+Após conferir adaptador, origem do MAC e acesso local, abra PowerShell como administrador:
 
-## Organização
+```powershell
+./PowerR.ps1 -Action Apply -Adapter 'Ethernet' -Mac '02:11:22:33:44:55' -AcknowledgeDisconnect
+./PowerR.ps1 -Action Status -Adapter 'Ethernet'
+./PowerR.ps1 -Action Diagnose -Adapter 'Ethernet'
+./PowerR.ps1 -Action Restore -Adapter 'Ethernet' -AcknowledgeDisconnect
+```
 
-| Parte | Papel |
-| --- | --- |
-| Inicialização | Elevação de privilégios e carregamento de Windows Forms. |
-| Interface | Seleção de adaptador, endereço, atualização e restauração. |
-| Integração TShark | Enumeração e captura na interface selecionada. |
+`Apply` e `Restore` pedem confirmação do PowerShell. Use `-WhatIf` para revisar uma alteração sem executá-la. O nome `Ethernet` é apenas exemplo: escolha o adaptador retornado por `Adapters`. O nome ou GUID identifica o mesmo alvo; o GUID é mais estável se o nome mudar.
 
-## Limites e validação
+## Fluxo de trabalho
 
-Compatibilidade depende do driver e da permissão de alteração do adaptador. Não há suíte automatizada nem rotina de instalação. Em laboratório autorizado, confirme a interface selecionada, a restauração do endereço original e a conectividade após encerrar. A ferramenta não garante anonimato nem autorização de acesso à rede.
+| Etapa | O que a ferramenta faz | O que você confere |
+| :--- | :--- | :--- |
+| `Adapters` | Lista interfaces, GUID, estado, MAC e descrição sem TShark. | A interface física correta. |
+| `Capture` | Escuta por 5 a 120 segundos e resume MACs de origem de ARP, LLDP e DHCP. Não salva PCAP. | Topologia, direção do TAP e se a origem pertence ao dispositivo pretendido. |
+| `Plan` | Valida o MAC e mostra configuração atual, destino e caminho do backup. | O alvo e a interrupção esperada da conexão. |
+| `Apply` | Salva estado local, altera só o adaptador selecionado, reinicia e verifica o MAC informado. | Estado de rede e registros do switch/NAC. |
+| `Restore` | Recupera o override anterior, reinicia, verifica e só então remove o backup. | Retorno da conectividade e configuração de acesso. |
+| `Diagnose` | Mostra link, IPv4, gateway, DNS e contadores de pacotes locais. | Se há configuração de rede útil; não infere autorização NAC. |
+
+MAC multicast e nulo são rejeitados. Um backup existente impede aplicar novamente até restaurar a sessão anterior. Falha de verificação preserva o backup para recuperação manual.
+
+## Documentação
+
+- [Operação e recuperação](docs/OPERATIONS.md)
+- [Arquitetura, dados e limites](docs/ARCHITECTURE.md)
+- [Testes e contribuição](docs/TESTING.md)
+
+O script gráfico original foi retirado porque seu comando de restauração tentava modificar todos os adaptadores e não guardava estado para recuperação. A versão anterior continua disponível no histórico Git.
+
+## Limites
+
+Um MAC visto em uma captura não comprova que a origem está conectada à porta pretendida. A ferramenta também não demonstra autenticação 802.1X, MAB, MACsec, autorização NAC ou acesso a uma VLAN. Confirme essas condições com a telemetria do switch e do servidor de autenticação. A alteração do MAC pode derrubar a sessão remota e ser recusada pelo driver. A validação local cobre sintaxe, planejamento e comportamento sem mutação; a alteração física requer laboratório autorizado.
